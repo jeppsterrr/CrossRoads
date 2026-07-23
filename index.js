@@ -1,0 +1,165 @@
+/*
+ * Crossroads — SillyTavern Extension
+ * Choose-your-own-adventure prompt bar. Draw four distinct directions, preview
+ * and expand any option, or custom-enhance it with an OOC instruction before
+ * sending it to the input box. Ported from the Tavo plugin of the same name
+ * (com.jeppsterrr.crossroads) — see panel.js for the ported bar itself.
+ *
+ * This file is a classic (non-module) script — SillyTavern loads it directly,
+ * not as type="module" — so it can't use static `import`. store.js/
+ * connection.js/panel.js are real ES modules, reached via dynamic import()
+ * below (same technique Deep Story Reforged uses for the same reason). This
+ * file itself only does three things: bootstrap those modules with ST's
+ * handles, mount the bar's markup into the page, and build the Extensions-
+ * panel settings drawer.
+ */
+
+var Store, Connection, Panel;
+
+var SETTINGS_HTML = `
+<div class="inline-drawer">
+  <div class="inline-drawer-toggle inline-drawer-header">
+    <b><i class="fa-solid fa-shuffle"></i> Crossroads</b>
+    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+  </div>
+  <div class="inline-drawer-content">
+    <div class="cr-settings-row">
+      <label class="checkbox_label"><input type="checkbox" id="cr-s-show"><span>Show the Crossroads bar</span></label>
+    </div>
+
+    <div class="cr-settings-row">
+      <label for="cr-s-prompt">Choice instruction</label>
+      <textarea id="cr-s-prompt" placeholder="Suggest what the player character could do or say next. Every option must be a genuinely different direction for the scene..."></textarea>
+      <p class="cr-settings-hint">Rewrite this to change what kind of options you get — darker, funnier, always dialogue, always physical action, more cautious, whatever suits the story. Leave blank to use the built-in default. Crossroads always adds its own rules on top, so options stay in the player's voice and never speak for anyone else.</p>
+    </div>
+
+    <div class="cr-settings-row">
+      <label for="cr-s-lang">Language for generated options</label>
+      <input type="text" id="cr-s-lang" placeholder="Leave blank for English/default">
+    </div>
+
+    <hr>
+    <div class="cr-settings-row">
+      <label for="cr-s-source">Generation source</label>
+      <select id="cr-s-source">
+        <option value="profile">Connection Manager profile</option>
+        <option value="openai">OpenAI-compatible endpoint</option>
+      </select>
+      <p class="cr-settings-hint">Crossroads always generates quietly in the background — either path leaves the chat's active connection and history untouched.</p>
+    </div>
+
+    <div class="cr-settings-row" id="cr-s-profile-row">
+      <label for="cr-s-profile">Connection profile</label>
+      <select id="cr-s-profile"></select>
+      <p class="cr-settings-hint">Sent via ST's Connection Manager. Requires the Connection Manager extension and at least one saved profile.</p>
+    </div>
+
+    <div class="cr-settings-row" id="cr-s-openai-row">
+      <label for="cr-s-openai-url">OpenAI-compatible URL</label>
+      <input type="text" id="cr-s-openai-url" placeholder="http://localhost:5001/v1 or https://api.example.com/v1">
+      <label for="cr-s-openai-key">API key (optional)</label>
+      <input type="password" id="cr-s-openai-key" placeholder="Leave blank if the endpoint needs none">
+      <label for="cr-s-openai-model">Model</label>
+      <input type="text" id="cr-s-openai-model" placeholder="Model name the endpoint expects">
+      <label for="cr-s-openai-maxtokens">Max tokens (optional)</label>
+      <input type="number" id="cr-s-openai-maxtokens" min="0" step="1" placeholder="0 = provider default">
+      <p class="cr-settings-hint">Local endpoints (koboldcpp, text-generation-webui, LM Studio, ...) are routed through ST's CORS proxy automatically.</p>
+    </div>
+  </div>
+</div>
+`;
+
+jQuery(async function () {
+    try {
+        Store = await import("./store.js");
+        Connection = await import("./connection.js");
+        Panel = await import("./panel.js");
+
+        var extMod = await import("../../../extensions.js");
+        var scriptModule = await import("../../../../script.js");
+        var puMod = await import("../../../power-user.js");
+
+        Store.setBootstrap({
+            extSettings: extMod.extension_settings,
+            saveFn: extMod.saveSettingsDebounced,
+            scriptModule: scriptModule,
+            powerUser: puMod.power_user
+        });
+
+        Store.loadSettings();
+
+        document.body.insertAdjacentHTML("beforeend", Panel.BAR_HTML);
+        Panel.init();
+
+        buildSettingsPanel();
+
+        console.log("[Crossroads] Loaded!");
+    } catch (e) {
+        console.error("[Crossroads] Init error:", e);
+    }
+});
+
+function buildSettingsPanel() {
+    var $container = $("#extensions_settings2");
+    if (!$container.length) $container = $("#extensions_settings");
+    if (!$container.length) return;
+    $container.append(SETTINGS_HTML);
+
+    var s = Store.settings;
+    $("#cr-s-show").prop("checked", s.showBar !== false);
+    $("#cr-s-prompt").val(s.systemPrompt || "");
+    $("#cr-s-lang").val(s.storyLanguage || "");
+    $("#cr-s-source").val(s.connectionSource || "profile");
+    $("#cr-s-openai-url").val(s.openaiUrl || "");
+    $("#cr-s-openai-key").val(s.openaiKey || "");
+    $("#cr-s-openai-model").val(s.openaiModel || "");
+    $("#cr-s-openai-maxtokens").val(s.openaiMaxTokens || "");
+
+    Connection.populateProfileDropdown(document.getElementById("cr-s-profile"), s.connectionProfileId);
+
+    function updateSourceVisibility() {
+        var source = $("#cr-s-source").val();
+        $("#cr-s-profile-row").toggle(source === "profile");
+        $("#cr-s-openai-row").toggle(source === "openai");
+    }
+    updateSourceVisibility();
+
+    $("#cr-s-show").on("change", function () {
+        Store.settings.showBar = $(this).prop("checked");
+        Store.save();
+        Panel.setBarVisible(Store.settings.showBar);
+    });
+    $("#cr-s-prompt").on("input", function () {
+        Store.settings.systemPrompt = $(this).val();
+        Store.save();
+    });
+    $("#cr-s-lang").on("input", function () {
+        Store.settings.storyLanguage = $(this).val();
+        Store.save();
+    });
+    $("#cr-s-source").on("change", function () {
+        Store.settings.connectionSource = $(this).val();
+        Store.save();
+        updateSourceVisibility();
+    });
+    $("#cr-s-profile").on("change", function () {
+        Store.settings.connectionProfileId = $(this).val();
+        Store.save();
+    });
+    $("#cr-s-openai-url").on("input", function () {
+        Store.settings.openaiUrl = $(this).val();
+        Store.save();
+    });
+    $("#cr-s-openai-key").on("input", function () {
+        Store.settings.openaiKey = $(this).val();
+        Store.save();
+    });
+    $("#cr-s-openai-model").on("input", function () {
+        Store.settings.openaiModel = $(this).val();
+        Store.save();
+    });
+    $("#cr-s-openai-maxtokens").on("input", function () {
+        Store.settings.openaiMaxTokens = Number($(this).val()) || 0;
+        Store.save();
+    });
+}

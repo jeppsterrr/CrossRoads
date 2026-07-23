@@ -1,0 +1,250 @@
+/*
+ * style.css
+ * ---------------------------------------------------------------------------
+ * Ported unchanged from the Tavo plugin's ui/panel.html <style> block. Every
+ * rule here is scoped under .cr and driven entirely by CSS custom properties
+ * (--cr-accent, --cr-bg, --cr-bar-x, ...) set from JS in panel.js — none of
+ * it depended on the Tavo host, so nothing needed to change for SillyTavern.
+ * ---------------------------------------------------------------------------
+ */
+
+.cr {
+  --cr-bg: #17171a;
+  --cr-surface: #202025;
+  --cr-text: #ece9e3;
+  --cr-muted: #a4a09a;
+  --cr-faint: #6f6c68;
+  --cr-accent: #c8a24a;
+  --cr-accent-soft: rgba(200, 162, 74, 0.16);
+  --cr-hairline: rgba(255, 255, 255, 0.09);
+  --cr-fs: 1;
+  --cr-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--cr-text);
+}
+.cr[hidden] { display: none; }
+.cr * { box-sizing: border-box; }
+.cr svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+/* The bar is the only resting surface. It never becomes an orb: closing simply slides
+   the option slots back into it, leaving the compact grip + draw + palette shape. */
+.cr__bar {
+  pointer-events: auto;
+  position: fixed;
+  left: var(--cr-bar-x, 16px);
+  top: var(--cr-bar-y, 70vh);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 94vw;
+  padding: 5px 7px;
+  border-radius: 999px;
+  background: var(--cr-veil, #17171a);
+  border: 1px solid var(--cr-hairline);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  /* Opening can require sliding the bar left to stay on screen, so animate placement. */
+  transition: left 280ms var(--cr-ease), top 280ms var(--cr-ease);
+}
+.cr__bar.is-dragging { transition: none; cursor: grabbing; }
+
+.cr__toggle {
+  width: 22px; height: 26px; flex: 0 0 22px; padding: 3px 4px;
+  color: var(--cr-faint); background: none; border: 0; cursor: pointer;
+}
+.cr__toggle svg { stroke-width: 2.4; transition: transform 260ms var(--cr-ease); }
+.cr__toggle:hover { color: var(--cr-text); }
+.cr__toggle:disabled { opacity: 0.4; cursor: default; }
+.cr.is-open .cr__toggle svg { transform: rotate(180deg); }
+
+.cr__draw {
+  position: relative;
+  display: flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 13px 0 10px;
+  border: 0; border-radius: 999px;
+  background: var(--cr-accent); color: #14140f;
+  font-size: calc(12px * var(--cr-fs)); font-weight: 680; letter-spacing: 0.2px;
+  cursor: pointer; white-space: nowrap; flex: 0 0 auto;
+}
+.cr__draw:disabled { opacity: 0.55; cursor: default; }
+.cr__draw-icon { width: 14px; height: 14px; display: block; }
+.cr__draw-icon svg { stroke-width: 2.1; }
+.cr__draw-badge {
+  min-width: 16px; height: 16px; padding: 0 4px; margin-left: 1px;
+  border-radius: 8px; background: rgba(0, 0, 0, 0.26); color: #14140f;
+  font-size: calc(10px * var(--cr-fs)); font-weight: 750; line-height: 16px; text-align: center;
+}
+.cr__draw-badge[hidden] { display: none; }
+
+/* Slots animate their width so opening and closing glides instead of snapping. */
+.cr__slots {
+  display: flex; align-items: center; gap: 4px;
+  max-width: 0; opacity: 0; margin-left: -5px;
+  overflow: hidden;
+  transition: max-width 280ms var(--cr-ease), opacity 190ms ease, margin-left 280ms var(--cr-ease);
+}
+.cr.is-open .cr__slots { max-width: 300px; opacity: 1; margin-left: 0; }
+
+.cr__slot {
+  position: relative;
+  width: 34px; height: 34px; flex: 0 0 34px;
+  padding: 7px;
+  border-radius: 12px;
+  background: var(--cr-surface);
+  border: 1px solid var(--cr-hairline);
+  color: var(--cr-muted);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.cr__slot:hover { color: var(--cr-text); }
+.cr__slot.is-active { background: var(--cr-accent-soft); border-color: var(--cr-accent); color: var(--cr-accent); }
+.cr__slot.is-used { border-style: dashed; opacity: 0.62; }
+.cr__slot-dot { position: absolute; top: 4px; right: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--cr-accent); opacity: 0; transition: opacity 140ms ease; }
+.cr__slot.is-used .cr__slot-dot { opacity: 1; }
+
+.cr__icon-btn {
+  width: 28px; height: 28px; flex: 0 0 28px; padding: 6px;
+  border-radius: 50%; border: 1px solid var(--cr-hairline);
+  background: var(--cr-surface); color: var(--cr-muted); cursor: pointer;
+}
+.cr__icon-btn:hover { color: var(--cr-text); }
+
+.cr__sweep { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; overflow: hidden; background: transparent; }
+.cr__sweep[hidden] { display: none; }
+.cr__sweep::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 42%;
+  background: linear-gradient(90deg, transparent, var(--cr-accent), transparent);
+  animation: cr-sweep 1150ms linear infinite;
+}
+@keyframes cr-sweep { from { left: -45%; } to { left: 100%; } }
+
+/* Panels fade rather than pop, and sit above or below the bar depending on where the
+   user has parked it. Visibility is delayed on close so the fade can finish. */
+.cr__panel {
+  pointer-events: auto;
+  position: fixed;
+  left: 50%;
+  width: min(94vw, 460px);
+  max-height: min(52vh, 420px);
+  display: flex; flex-direction: column;
+  border-radius: 18px;
+  background: var(--cr-veil-solid, #17171a);
+  border: 1px solid var(--cr-hairline);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-50%) translateY(8px) scale(0.985);
+  transition: opacity 190ms ease, transform 220ms var(--cr-ease), visibility 0s linear 220ms;
+}
+.cr__panel.is-open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0) scale(1);
+  transition: opacity 190ms ease, transform 220ms var(--cr-ease), visibility 0s;
+}
+.cr.is-panel-above .cr__panel { bottom: var(--cr-panel-bottom, 140px); top: auto; }
+.cr:not(.is-panel-above) .cr__panel { top: var(--cr-panel-top, 140px); bottom: auto; }
+
+.cr__panel-head { display: flex; align-items: center; gap: 8px; padding: 11px 12px 8px; border-bottom: 1px solid var(--cr-hairline); }
+.cr__panel-icon { width: 20px; height: 20px; flex: 0 0 20px; color: var(--cr-accent); }
+.cr__panel-label { flex: 1; min-width: 0; font-size: calc(12.5px * var(--cr-fs)); font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cr__panel-tools { display: flex; align-items: center; gap: 5px; flex: 0 0 auto; }
+.cr__head-tool {
+  position: relative;
+  width: 28px; height: 28px; flex: 0 0 28px; padding: 5px;
+  border: 1px solid var(--cr-hairline); border-radius: 9px;
+  background: var(--cr-surface); color: var(--cr-muted); cursor: pointer;
+}
+.cr__head-tool:hover, .cr__head-tool[aria-expanded="true"] { color: var(--cr-accent); border-color: var(--cr-accent); }
+.cr__head-tool.has-instruction::after {
+  content: ""; position: absolute; top: 3px; right: 3px;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--cr-accent);
+}
+.cr__head-tool:disabled { opacity: 0.46; cursor: default; }
+.cr__head-tool.is-busy svg { animation: cr-wand-pulse 900ms ease-in-out infinite alternate; }
+@keyframes cr-wand-pulse { from { transform: rotate(-8deg) scale(0.92); } to { transform: rotate(7deg) scale(1.08); } }
+.cr__x { width: 26px; height: 26px; flex: 0 0 26px; padding: 0; border: 0; border-radius: 50%; background: var(--cr-surface); color: var(--cr-muted); font-size: 17px; line-height: 1; cursor: pointer; }
+.cr__x:hover { color: var(--cr-text); }
+
+.cr__enhance-prompt {
+  flex: 0 0 auto;
+  padding: 10px 12px 9px;
+  border-bottom: 1px solid var(--cr-hairline);
+  background: var(--cr-accent-soft);
+}
+.cr__enhance-prompt[hidden] { display: none; }
+.cr__enhance-label {
+  display: block; margin-bottom: 6px; color: var(--cr-muted);
+  font-size: calc(10.5px * var(--cr-fs)); font-weight: 650;
+  text-transform: uppercase; letter-spacing: 0.55px;
+}
+.cr__enhance-ooc {
+  display: block; width: 100%; min-height: 52px; max-height: 130px; resize: vertical;
+  padding: 8px 9px; border: 1px solid var(--cr-hairline); border-radius: 10px;
+  background: var(--cr-surface); color: var(--cr-text);
+  font: inherit; font-size: calc(12px * var(--cr-fs)); line-height: 1.4;
+}
+.cr__enhance-ooc:focus { outline: 1px solid var(--cr-accent); border-color: var(--cr-accent); }
+.cr__enhance-ooc::placeholder { color: var(--cr-faint); }
+.cr__enhance-ooc:disabled { opacity: 0.55; }
+.cr__enhance-actions { display: flex; align-items: center; gap: 9px; margin-top: 7px; }
+.cr__enhance-actions .cr__hint { flex: 1; min-width: 0; margin: 0; }
+.cr__enhance-run {
+  height: 31px; flex: 0 0 auto; padding: 0 11px;
+  border: 0; border-radius: 9px; background: var(--cr-accent); color: #14140f;
+  font-size: calc(11.5px * var(--cr-fs)); font-weight: 680; white-space: nowrap; cursor: pointer;
+}
+.cr__enhance-run:disabled { opacity: 0.46; cursor: default; }
+.cr__bubble.is-enhancing .cr__panel-body { opacity: 0.62; }
+
+.cr__panel-body {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 12px;
+  font-size: calc(13px * var(--cr-fs)); line-height: 1.52;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.cr__theme-body { white-space: normal; }
+
+.cr__panel-foot { display: flex; gap: 8px; padding: 9px 12px 11px; border-top: 1px solid var(--cr-hairline); }
+.cr__use { flex: 1; height: 34px; border: 0; border-radius: 11px; background: var(--cr-accent); color: #14140f; font-size: calc(12.5px * var(--cr-fs)); font-weight: 680; cursor: pointer; }
+.cr__ghost { height: 34px; padding: 0 14px; border: 1px solid var(--cr-hairline); border-radius: 11px; background: transparent; color: var(--cr-muted); font-size: calc(12px * var(--cr-fs)); cursor: pointer; white-space: nowrap; }
+.cr__ghost:hover { color: var(--cr-text); }
+.cr__use:disabled, .cr__ghost:disabled { opacity: 0.5; cursor: default; }
+
+.cr__row { margin-bottom: 13px; }
+.cr__row:last-child { margin-bottom: 2px; }
+.cr__row-label { display: block; margin-bottom: 6px; color: var(--cr-muted); font-size: calc(10.5px * var(--cr-fs)); text-transform: uppercase; letter-spacing: 0.7px; }
+.cr__swatches { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+.cr__swatch { width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+.cr__swatch.is-on { border-color: var(--cr-text); }
+.cr__hex { width: 86px; height: 28px; padding: 0 9px; border: 1px solid var(--cr-hairline); border-radius: 8px; background: var(--cr-surface); color: var(--cr-text); font-size: calc(11.5px * var(--cr-fs)); }
+.cr__hint { margin: 2px 0 0; color: var(--cr-faint); font-size: calc(10.5px * var(--cr-fs)); line-height: 1.45; }
+
+.cr__live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cr__slots, .cr__panel, .cr__slot { transition: none; }
+  .cr__sweep::after { animation: none; left: 0; width: 100%; opacity: 0.5; }
+  .cr__head-tool.is-busy svg { animation: none; }
+}
+
+/* ---------- Extensions-panel settings drawer (new, not part of the Tavo port) ---------- */
+.cr-settings-row { margin: 6px 0; }
+.cr-settings-row label { display: block; margin-bottom: 3px; }
+.cr-settings-row textarea { width: 100%; min-height: 70px; }
+.cr-settings-row input[type="text"],
+.cr-settings-row input[type="password"],
+.cr-settings-row input[type="number"],
+.cr-settings-row select { width: 100%; }
+.cr-settings-hint { opacity: 0.7; font-size: 0.85em; margin: 2px 0 8px; }

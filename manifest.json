@@ -1,0 +1,11 @@
+{
+    "display_name": "Crossroads",
+    "loading_order": 20,
+    "requires": [],
+    "optional": ["connection-manager"],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "Jeppsterrr",
+    "version": "1.1.0",
+    "description": "Choose-your-own-adventure prompt bar. Draw four distinct directions, preview and expand any option, or custom-enhance it with an OOC instruction before sending it to the input box."
+}

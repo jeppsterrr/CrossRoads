@@ -20,7 +20,11 @@ It's not a co-writer that takes over. It's a lure — four hooks cast into the s
 ## Installation
 
 1. In SillyTavern, open the **Extensions** panel (the plug icon) → **Install Extension**.
-2. Paste `https://github.com/jeppsterrr/CrossRoads` and confirm.
+2. Paste
+```
+https://github.com/jeppsterrr/CrossRoads
+```
+and confirm.
 3. Reload SillyTavern. A compact bar appears near the bottom of the chat screen.
 
 Prefer doing it by hand instead? Clone this repo directly into:

@@ -89,7 +89,14 @@ export function init() {
   var root = document.querySelector("[data-cr-root]");
   if (!root) return;
 
+  // A mouse click is essentially pixel-perfect, but a finger tap on real touch hardware
+  // routinely drifts several CSS px between touchstart and touchend even when the user
+  // meant a plain tap - a threshold this tight for touch spuriously started a "drag" on
+  // ordinary taps, which captured the pointer and (via the post-drag click-swallow window
+  // below) silently ate the very tap that should have opened a slot's bubble. Mouse/pen
+  // keep the tight threshold; touch gets a more forgiving one.
   var DRAG_START_PX = 5;
+  var DRAG_START_PX_TOUCH = 14;
   var BAR_MARGIN = 6;
   var OPTION_COUNT = 4;
   // Normal draws are still intentionally short, but an option expanded with the wand needs
@@ -786,7 +793,7 @@ export function init() {
       var raw = await Connection.generate(buildPrompt(messages, OPTION_COUNT, null, ids));
       options = parseOptions(raw, OPTION_COUNT);
       usedIds = Object.create(null);
-      persistDraw();
+      await persistDraw();
       // A bubble opened from the previous set while this draw was in flight would now be
       // showing old text against a new options array, so "Use this" would send the wrong
       // one. Closing here rebinds the bar to the set that actually landed.
@@ -825,7 +832,7 @@ export function init() {
       var replacement = parseOptions(raw, 1)[0];
       delete usedIds[target.id];
       options[index] = replacement;
-      persistDraw();
+      await persistDraw();
       if (openIndex === index) openBubble(index);
       else renderSlots();
       announce("Option replaced.");
@@ -873,7 +880,7 @@ export function init() {
 
       options[index].text = transformed;
       delete usedIds[targetId];
-      persistDraw();
+      await persistDraw();
       if (openIndex === index) openBubble(index);
       var afterWords = wordCount(transformed);
       announce(enhancing
@@ -895,8 +902,8 @@ export function init() {
   function expandOption(index) { return transformOption(index, "expand"); }
   function enhanceOption(index) { return transformOption(index, "enhance"); }
 
-  function persistDraw() {
-    Store.writeDraw({ at: new Date().toISOString(), options: options, used: Object.keys(usedIds) });
+  async function persistDraw() {
+    await Store.writeDraw({ at: new Date().toISOString(), options: options, used: Object.keys(usedIds) });
     renderSlots();
   }
 
@@ -974,7 +981,7 @@ export function init() {
     try {
       setInputText(option.text);
       usedIds[option.id] = true;
-      persistDraw();
+      await persistDraw();
       closeBubble();
       announce("Option placed in the input box.");
     } catch (_) {
@@ -1063,6 +1070,7 @@ export function init() {
     var startY = 0;
     var originX = 0;
     var originY = 0;
+    var threshold = DRAG_START_PX;
 
     barEl.addEventListener("pointerdown", function (event) {
       if (event.button != null && event.button !== 0) return;
@@ -1072,6 +1080,7 @@ export function init() {
       startY = event.clientY;
       originX = ui.barX;
       originY = ui.barY;
+      threshold = event.pointerType === "touch" ? DRAG_START_PX_TOUCH : DRAG_START_PX;
       // Deliberately NOT capturing the pointer yet. Chrome retargets the follow-up
       // `click` event to whichever element holds pointer capture, so capturing here
       // (on every press, before the drag threshold) made every click on Draw / the
@@ -1087,7 +1096,7 @@ export function init() {
       var dx = event.clientX - startX;
       var dy = event.clientY - startY;
       if (!moved) {
-        if (Math.abs(dx) < DRAG_START_PX && Math.abs(dy) < DRAG_START_PX) return;
+        if (Math.abs(dx) < threshold && Math.abs(dy) < threshold) return;
         moved = true;
         barEl.classList.add("is-dragging");
         // Now that it IS a drag, capture so the pointer can leave the bar without

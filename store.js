@@ -110,12 +110,22 @@ export function readDraw() {
     } catch (e) { return null; }
 }
 
-export function writeDraw(value) {
+// Actually persists to disk (awaited), not just to the in-memory chat_metadata object.
+// scriptModule.saveMetadataDebounced - the name Deep Story Reforged calls, and what this
+// used to call - does not exist as an export on this SillyTavern version's script.js; the
+// typeof guard around it silently no-opped, so a drawn set survived only until the next
+// reload or chat switch, then was gone with no error anywhere. saveMetadata() (an alias for
+// saveChatConditional()) is the real, confirmed-exported, non-debounced save.
+export async function writeDraw(value) {
     try {
         if (!isChatOpen() || !scriptModule || !scriptModule.chat_metadata) return false;
         scriptModule.chat_metadata[DRAW_KEY] = value;
-        if (typeof scriptModule.saveMetadataDebounced === "function") {
+        if (typeof scriptModule.saveMetadata === "function") {
+            await scriptModule.saveMetadata();
+        } else if (typeof scriptModule.saveMetadataDebounced === "function") {
             scriptModule.saveMetadataDebounced();
+        } else {
+            console.warn("[Crossroads] No metadata save function found on script.js; draw will not persist across a reload.");
         }
         return true;
     } catch (e) { return false; }

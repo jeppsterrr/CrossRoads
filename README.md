@@ -51,7 +51,6 @@ Find these under **Extensions → Crossroads** in the SillyTavern settings panel
 |---|---|
 | **Show the Crossroads bar** | Hides the bar entirely without disabling the extension. |
 | **Choice instruction** | The heart of the plugin. Rewrite it to change what kind of options you get — darker, funnier, always dialogue, always physical action, more cautious. Leave blank to use the built-in default. |
-| **Language for generated options** | Leave blank for English/default, or name any language the model can write. |
 | **Generation source** | Where Crossroads sends its (quiet, background-only) generation requests — see below. |
 
 ### Generation source

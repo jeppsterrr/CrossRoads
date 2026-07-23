@@ -128,7 +128,7 @@ export function init() {
   var FALLBACK_TONE = "curious";
 
   var ACCENTS = ["#c8a24a", "#d2694a", "#7fa7d4", "#8fbf7f", "#b58ac8", "#d48aa8", "#8ec8c0", "#cfc9bd"];
-  var BACKDROPS = ["#17171a", "#101014", "#1d1a17", "#141b18", "#181420", "#232326"];
+  var BACKDROPS = ["#17171a", "#101014", "#1d1a17", "#141b18", "#181420", "#232326", "#FDFBD4"];
 
   var barEl = root.querySelector("[data-cr-bar]");
   var slotsEl = root.querySelector("[data-cr-slots]");
@@ -293,16 +293,52 @@ export function init() {
   function applyUi() {
     root.style.setProperty("--cr-accent", ui.accent);
     root.style.setProperty("--cr-accent-soft", hexToRgba(ui.accent, 0.16));
+    root.style.setProperty("--cr-accent-text", contrastTextFor(ui.accent));
     root.style.setProperty("--cr-bg", ui.backdrop);
     // Panels are translucent over the chat. These are precomputed rather than written as
     // color-mix() so the bar still renders on WebViews without that CSS function.
     root.style.setProperty("--cr-veil", hexToRgba(ui.backdrop, 0.92));
     root.style.setProperty("--cr-veil-solid", hexToRgba(ui.backdrop, 0.96));
     root.style.setProperty("--cr-surface", hexToRgba(mixToward(ui.backdrop, 255, 0.07), 1));
+    var tier = textTierFor(ui.backdrop);
+    root.style.setProperty("--cr-text", tier.text);
+    root.style.setProperty("--cr-muted", tier.muted);
+    root.style.setProperty("--cr-faint", tier.faint);
+    root.style.setProperty("--cr-hairline", tier.hairline);
     root.classList.toggle("is-open", ui.open && options.length > 0);
     clampBar();
     applyBarPosition();
     renderBadge();
+  }
+
+  function relativeLuminance(hex) {
+    var r = parseInt(hex.slice(1, 3), 16);
+    var g = parseInt(hex.slice(3, 5), 16);
+    var b = parseInt(hex.slice(5, 7), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  }
+
+  // The Draw/Use/Enhance buttons paint solid --cr-accent behind their label, so the text
+  // color has to react to whatever accent is picked, not assume a mid-tone. A pale cream
+  // (e.g. #FDFBD4, luminance ~0.97) gets dark text and a deep/saturated accent gets light
+  // text, regardless of preset swatch or custom hex.
+  function contrastTextFor(hex) {
+    if (!isHexColor(hex)) return "#14140f";
+    return relativeLuminance(hex) > 0.6 ? "#14140f" : "#ffffff";
+  }
+
+  // --cr-text/--cr-muted/--cr-faint/--cr-hairline are body text and borders drawn on
+  // surfaces derived from the BACKDROP (--cr-veil/--cr-veil-solid/--cr-surface), not the
+  // accent - same problem as contrastTextFor above, one level down. They used to be fixed
+  // "light text" values baked into the stylesheet, which is why a light custom backdrop
+  // (e.g. the same #FDFBD4) still rendered body text in a fixed near-white color that
+  // vanished against it. Two full tiers - one for dark backdrops, one for light - picked by
+  // the same luminance threshold used for the accent.
+  var TEXT_ON_DARK = { text: "#ece9e3", muted: "#a4a09a", faint: "#6f6c68", hairline: "rgba(255, 255, 255, 0.09)" };
+  var TEXT_ON_LIGHT = { text: "#1c1a16", muted: "#5c564d", faint: "#8a8479", hairline: "rgba(0, 0, 0, 0.12)" };
+  function textTierFor(hex) {
+    if (!isHexColor(hex)) return TEXT_ON_DARK;
+    return relativeLuminance(hex) > 0.6 ? TEXT_ON_LIGHT : TEXT_ON_DARK;
   }
 
   function hexToRgba(hex, alpha) {
@@ -525,12 +561,6 @@ export function init() {
     return "Each option is 25 to 60 words.";
   }
 
-  function languageLine() {
-    var language = String(cfg("storyLanguage", "") || "").trim();
-    if (!language || /^(english|auto|default)$/i.test(language)) return "";
-    return 'Write every "label" and "text" value in ' + language + ". Keep the JSON keys and tone values in English.";
-  }
-
   function instruction() {
     var custom = String(cfg("systemPrompt", "") || "").trim();
     return custom || "Suggest what the player character could do or say next. Every option must be a genuinely different direction for the scene, not the same move reworded. Stay inside the established genre, tone, and continuity. Never narrate or speak for anyone except the player character.";
@@ -586,8 +616,6 @@ export function init() {
       instruction(),
       lengthGuidance(targetWords)
     ];
-    var language = languageLine();
-    if (language) head.push(language);
     head.push("Return ONLY a valid JSON object. No commentary, no markdown fences.");
     head.push('Shape: {"options":[{"tone":"bold","label":"three to five word summary","text":"what ' + player + ' does or says"}]}');
     head.push(count === 1
@@ -641,12 +669,6 @@ export function init() {
     return typeof result === "string" ? result : "";
   }
 
-  function proseLanguageLine() {
-    var language = String(cfg("storyLanguage", "") || "").trim();
-    if (!language || /^(english|auto|default)$/i.test(language)) return "";
-    return "Write the expanded option in " + language + ".";
-  }
-
   function buildExpandPrompt(option, ids) {
     var player = ids.persona;
     var originalWords = Math.max(1, wordCount(option.text));
@@ -663,8 +685,6 @@ export function init() {
       "Make the result clearly longer than the source. Aim for " + minimum + " to " + maximum + " words.",
       "Return only the final expanded roleplay prose. No analysis, labels, OOC wrapper, quotation marks around the whole response, or markdown fence."
     ];
-    var language = proseLanguageLine();
-    if (language) rules.push(language);
     rules.push("]");
 
     return rules.join("\n") + "\n\nCANDIDATE TURN TO EXPAND — written only for " +
@@ -687,8 +707,6 @@ export function init() {
       "Use the live chat only for continuity. Never let " + player + " act on private narration, thoughts, secrets, or other information they have not actually learned.",
       "Return only the revised roleplay prose. No analysis, labels, OOC wrapper, quotation marks around the whole response, or markdown fence."
     ];
-    var language = proseLanguageLine();
-    if (language) rules.push(language);
     rules.push("]");
 
     return [

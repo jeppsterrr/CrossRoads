@@ -70,7 +70,7 @@
   display: flex; align-items: center; gap: 6px;
   height: 30px; padding: 0 13px 0 10px;
   border: 0; border-radius: 999px;
-  background: var(--cr-accent); color: #14140f;
+  background: var(--cr-accent); color: var(--cr-accent-text, #14140f);
   font-size: calc(12px * var(--cr-fs)); font-weight: 680; letter-spacing: 0.2px;
   cursor: pointer; white-space: nowrap; flex: 0 0 auto;
 }
@@ -79,7 +79,7 @@
 .cr__draw-icon svg { stroke-width: 2.1; }
 .cr__draw-badge {
   min-width: 16px; height: 16px; padding: 0 4px; margin-left: 1px;
-  border-radius: 8px; background: rgba(0, 0, 0, 0.26); color: #14140f;
+  border-radius: 8px; background: rgba(0, 0, 0, 0.26); color: var(--cr-accent-text, #14140f);
   font-size: calc(10px * var(--cr-fs)); font-weight: 750; line-height: 16px; text-align: center;
 }
 .cr__draw-badge[hidden] { display: none; }
@@ -202,7 +202,7 @@
 .cr__enhance-actions .cr__hint { flex: 1; min-width: 0; margin: 0; }
 .cr__enhance-run {
   height: 31px; flex: 0 0 auto; padding: 0 11px;
-  border: 0; border-radius: 9px; background: var(--cr-accent); color: #14140f;
+  border: 0; border-radius: 9px; background: var(--cr-accent); color: var(--cr-accent-text, #14140f);
   font-size: calc(11.5px * var(--cr-fs)); font-weight: 680; white-space: nowrap; cursor: pointer;
 }
 .cr__enhance-run:disabled { opacity: 0.46; cursor: default; }
@@ -217,7 +217,7 @@
 .cr__theme-body { white-space: normal; }
 
 .cr__panel-foot { display: flex; gap: 8px; padding: 9px 12px 11px; border-top: 1px solid var(--cr-hairline); }
-.cr__use { flex: 1; height: 34px; border: 0; border-radius: 11px; background: var(--cr-accent); color: #14140f; font-size: calc(12.5px * var(--cr-fs)); font-weight: 680; cursor: pointer; }
+.cr__use { flex: 1; height: 34px; border: 0; border-radius: 11px; background: var(--cr-accent); color: var(--cr-accent-text, #14140f); font-size: calc(12.5px * var(--cr-fs)); font-weight: 680; cursor: pointer; }
 .cr__ghost { height: 34px; padding: 0 14px; border: 1px solid var(--cr-hairline); border-radius: 11px; background: transparent; color: var(--cr-muted); font-size: calc(12px * var(--cr-fs)); cursor: pointer; white-space: nowrap; }
 .cr__ghost:hover { color: var(--cr-text); }
 .cr__use:disabled, .cr__ghost:disabled { opacity: 0.5; cursor: default; }
@@ -240,11 +240,10 @@
 }
 
 /* ---------- Extensions-panel settings drawer (new, not part of the Tavo port) ---------- */
+/* Fields themselves use ST's own .text_pole class so they match every other extension's
+   settings fields (dark themed background/border, not a plain unstyled white input) - this
+   block is only the spacing .text_pole doesn't already provide. */
 .cr-settings-row { margin: 6px 0; }
 .cr-settings-row label { display: block; margin-bottom: 3px; }
-.cr-settings-row textarea { width: 100%; min-height: 70px; }
-.cr-settings-row input[type="text"],
-.cr-settings-row input[type="password"],
-.cr-settings-row input[type="number"],
-.cr-settings-row select { width: 100%; }
+.cr-settings-row textarea.text_pole { min-height: 70px; resize: vertical; }
 .cr-settings-hint { opacity: 0.7; font-size: 0.85em; margin: 2px 0 8px; }

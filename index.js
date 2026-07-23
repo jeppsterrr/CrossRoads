@@ -29,19 +29,14 @@ var SETTINGS_HTML = `
 
     <div class="cr-settings-row">
       <label for="cr-s-prompt">Choice instruction</label>
-      <textarea id="cr-s-prompt" placeholder="Suggest what the player character could do or say next. Every option must be a genuinely different direction for the scene..."></textarea>
+      <textarea id="cr-s-prompt" class="text_pole" placeholder="Suggest what the player character could do or say next. Every option must be a genuinely different direction for the scene..."></textarea>
       <p class="cr-settings-hint">Rewrite this to change what kind of options you get — darker, funnier, always dialogue, always physical action, more cautious, whatever suits the story. Leave blank to use the built-in default. Crossroads always adds its own rules on top, so options stay in the player's voice and never speak for anyone else.</p>
-    </div>
-
-    <div class="cr-settings-row">
-      <label for="cr-s-lang">Language for generated options</label>
-      <input type="text" id="cr-s-lang" placeholder="Leave blank for English/default">
     </div>
 
     <hr>
     <div class="cr-settings-row">
       <label for="cr-s-source">Generation source</label>
-      <select id="cr-s-source">
+      <select id="cr-s-source" class="text_pole">
         <option value="profile">Connection Manager profile</option>
         <option value="openai">OpenAI-compatible endpoint</option>
       </select>
@@ -50,19 +45,19 @@ var SETTINGS_HTML = `
 
     <div class="cr-settings-row" id="cr-s-profile-row">
       <label for="cr-s-profile">Connection profile</label>
-      <select id="cr-s-profile"></select>
+      <select id="cr-s-profile" class="text_pole"></select>
       <p class="cr-settings-hint">Sent via ST's Connection Manager. Requires the Connection Manager extension and at least one saved profile.</p>
     </div>
 
     <div class="cr-settings-row" id="cr-s-openai-row">
       <label for="cr-s-openai-url">OpenAI-compatible URL</label>
-      <input type="text" id="cr-s-openai-url" placeholder="http://localhost:5001/v1 or https://api.example.com/v1">
+      <input type="text" id="cr-s-openai-url" class="text_pole" placeholder="http://localhost:5001/v1 or https://api.example.com/v1">
       <label for="cr-s-openai-key">API key (optional)</label>
-      <input type="password" id="cr-s-openai-key" placeholder="Leave blank if the endpoint needs none">
+      <input type="password" id="cr-s-openai-key" class="text_pole" placeholder="Leave blank if the endpoint needs none">
       <label for="cr-s-openai-model">Model</label>
-      <input type="text" id="cr-s-openai-model" placeholder="Model name the endpoint expects">
+      <input type="text" id="cr-s-openai-model" class="text_pole" placeholder="Model name the endpoint expects">
       <label for="cr-s-openai-maxtokens">Max tokens (optional)</label>
-      <input type="number" id="cr-s-openai-maxtokens" min="0" step="1" placeholder="0 = provider default">
+      <input type="number" id="cr-s-openai-maxtokens" class="text_pole" min="0" step="1" placeholder="0 = provider default">
       <p class="cr-settings-hint">Local endpoints (koboldcpp, text-generation-webui, LM Studio, ...) are routed through ST's CORS proxy automatically.</p>
     </div>
   </div>
@@ -108,7 +103,6 @@ function buildSettingsPanel() {
     var s = Store.settings;
     $("#cr-s-show").prop("checked", s.showBar !== false);
     $("#cr-s-prompt").val(s.systemPrompt || "");
-    $("#cr-s-lang").val(s.storyLanguage || "");
     $("#cr-s-source").val(s.connectionSource || "profile");
     $("#cr-s-openai-url").val(s.openaiUrl || "");
     $("#cr-s-openai-key").val(s.openaiKey || "");
@@ -131,10 +125,6 @@ function buildSettingsPanel() {
     });
     $("#cr-s-prompt").on("input", function () {
         Store.settings.systemPrompt = $(this).val();
-        Store.save();
-    });
-    $("#cr-s-lang").on("input", function () {
-        Store.settings.storyLanguage = $(this).val();
         Store.save();
     });
     $("#cr-s-source").on("change", function () {

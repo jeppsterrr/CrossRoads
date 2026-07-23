@@ -26,7 +26,6 @@ const DRAW_KEY = "crossroads_draw_v1";
 
 export const DEFAULT_SETTINGS = {
     showBar: true,
-    storyLanguage: "",
     systemPrompt: "",
     // "profile" routes through ST's Connection Manager (ConnectionManagerRequestService,
     // a saved profile, no effect on the chat's active connection); "openai" hits a

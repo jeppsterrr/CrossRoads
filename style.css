@@ -153,8 +153,11 @@
   transform: translateX(-50%) translateY(0) scale(1);
   transition: opacity 190ms ease, transform 220ms var(--cr-ease), visibility 0s;
 }
-.cr.is-panel-above .cr__panel { bottom: var(--cr-panel-bottom, 140px); top: auto; }
-.cr:not(.is-panel-above) .cr__panel { top: var(--cr-panel-top, 140px); bottom: auto; }
+/* Panel top (and bottom:auto) is set inline by positionPanels() in panel.js on the TOP
+   axis only - never `bottom` - so it survives mobile layouts that collapse the fixed-
+   positioning containing block to zero height. A default keeps it sane before the first JS
+   pass (panels start visibility:hidden, so this never actually flashes). */
+.cr__panel { top: 140px; bottom: auto; }
 
 .cr__panel-head { display: flex; align-items: center; gap: 8px; padding: 11px 12px 8px; border-bottom: 1px solid var(--cr-hairline); }
 .cr__panel-icon { width: 20px; height: 20px; flex: 0 0 20px; color: var(--cr-accent); }

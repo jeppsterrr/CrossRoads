@@ -282,12 +282,35 @@ export function init() {
   }
 
   // Panels sit above the bar when it is parked low, and below it when parked high.
+  //
+  // Everything is driven on the TOP axis, never `bottom`. Some mobile layouts (notably
+  // the AstraProjecta extension) put a transform on <html> AND pull everything out of flow
+  // so <html> collapses to height:0. Per spec a transformed <html> becomes the containing
+  // block for our position:fixed panels, so a `bottom` offset then resolves against that
+  // collapsed box's bottom edge - which sits at y=0 - and throws the panel clean off the
+  // TOP of the screen (this is why parking the bar low made the bubble vanish on mobile).
+  // `top` resolves against that same y=0 edge, which coincides with the viewport top, so it
+  // stays correct everywhere. Sitting a panel ABOVE the bar therefore means computing
+  // top = barY - (panel's own measured height) - gap, not anchoring its bottom.
   function positionPanels() {
     var size = barSize();
+    var gap = 10;
     var above = ui.barY > window.innerHeight * 0.45;
     root.classList.toggle("is-panel-above", above);
-    if (above) root.style.setProperty("--cr-panel-bottom", Math.max(8, window.innerHeight - ui.barY + 10) + "px");
-    else root.style.setProperty("--cr-panel-top", Math.max(8, ui.barY + size.h + 10) + "px");
+    [bubbleEl, themeEl].forEach(function (el) {
+      if (!el) return;
+      var top;
+      if (above) {
+        // Measurable even while the panel is visibility:hidden (it still lays out), and its
+        // height depends on content/width/max-height, not on where it's currently anchored.
+        var h = el.getBoundingClientRect().height || 0;
+        top = Math.max(8, ui.barY - h - gap);
+      } else {
+        top = Math.max(8, ui.barY + size.h + gap);
+      }
+      el.style.top = top + "px";
+      el.style.bottom = "auto";
+    });
   }
 
   function applyUi() {

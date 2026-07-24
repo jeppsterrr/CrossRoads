@@ -56,6 +56,7 @@ Find these under **Extensions → Crossroads** in the SillyTavern settings panel
 |---|---|
 | **Show the Crossroads bar** | Hides the bar entirely without disabling the extension. |
 | **Choice instruction** | The heart of the plugin. Rewrite it to change what kind of options you get — darker, funnier, always dialogue, always physical action, more cautious. Leave blank to use the built-in default. |
+| **Planning step** | On by default. Gives the model a short scratch space to plan before it answers, which is discarded before anything reaches you. Helps fast / non-thinking models (e.g. a Flash variant) keep the four options genuinely distinct instead of near-duplicates. Thinking models reason on their own, so their output is unchanged either way; turn it off for the leanest possible prompt. |
 | **Generation source** | Where Crossroads sends its (quiet, background-only) generation requests — see below. |
 
 ### Generation source

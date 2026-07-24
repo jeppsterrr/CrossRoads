@@ -43,7 +43,18 @@ async function sendViaProfile(prompt) {
     }
     var raw;
     try {
-        raw = await service.sendRequest(profileId, [{ role: "user", content: prompt }], { ignoreInstruct: true });
+        // sendRequest's real signature is (profileId, messages, maxTokens, custom, overridePayload) -
+        // maxTokens is a NUMBER, not an options object. An options object here (an earlier bug)
+        // wasn't stripped as undefined would be, so it went straight into the request body as
+        // max_tokens itself; most backends tolerated the garbage value, but at least one (Google AI
+        // Studio) validates it strictly and rejected it with a max_output_tokens error. undefined
+        // lets the profile's own preset-configured response length govern, matching how the
+        // OpenAI-Compatible path also applies no cap of its own unless the user sets one.
+        // includeInstruct: false (the actual custom option; "ignoreInstruct" was never real) stops
+        // Crossroads' already-self-contained prompt from being wrapped in the profile's Instruct
+        // Template on text-completion-type profiles (local backends like koboldcpp) - it's a no-op
+        // for chat-completion-type profiles, which don't apply an instruct template at all.
+        raw = await service.sendRequest(profileId, [{ role: "user", content: prompt }], undefined, { includeInstruct: false });
     } catch (error) {
         throw new Error("Connection Manager request failed: " + (error && error.message ? error.message : String(error)));
     }

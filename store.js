@@ -27,6 +27,12 @@ const DRAW_KEY = "crossroads_draw_v1";
 export const DEFAULT_SETTINGS = {
     showBar: true,
     systemPrompt: "",
+    // Adds a discarded "plan" field to the options request (and an optional discarded
+    // <plan> block to the expand/enhance prose requests) so fast / non-thinking models get
+    // a place to reason before answering. Thinking models are unaffected: their reasoning
+    // already happens out of band and the plan is parsed out and thrown away, so their
+    // visible output is unchanged. See buildPrompt/parseProseText in panel.js.
+    planningStep: true,
     // "profile" routes through ST's Connection Manager (ConnectionManagerRequestService,
     // a saved profile, no effect on the chat's active connection); "openai" hits a
     // directly-configured OpenAI-compatible endpoint. See connection.js.

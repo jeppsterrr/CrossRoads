@@ -607,6 +607,7 @@ export function init() {
   function buildPrompt(messages, count, avoid, ids, targetWords) {
     var player = ids.persona;
     var playerHasWritten = messages.some(isUserMessage);
+    var planning = !!cfg("planningStep", true);
 
     var transcript = messages.map(function (m) {
       return speakerName(m, ids) + ": " + trimMessage(cleanForPrompt(messageText(m)), MAX_MESSAGE_CHARS);
@@ -640,7 +641,18 @@ export function init() {
       lengthGuidance(targetWords)
     ];
     head.push("Return ONLY a valid JSON object. No commentary, no markdown fences.");
-    head.push('Shape: {"options":[{"tone":"bold","label":"three to five word summary","text":"what ' + player + ' does or says"}]}');
+    // Planning field: a place for the model to reason before committing to options. Thinking
+    // models already reason out of band and this is parsed out and discarded (parseOptions
+    // reads only .options), so their output is unchanged; fast / non-thinking models, which
+    // otherwise have no room to think under the "only JSON" rule, use it to keep the options
+    // genuinely distinct instead of collapsing toward one move. Off = the original minimal
+    // shape (see the Planning step setting).
+    if (planning) {
+      head.push('Shape: {"plan":"one short line naming each option\'s distinct approach","options":[{"tone":"bold","label":"three to five word summary","text":"what ' + player + ' does or says"}]}');
+      head.push('Fill "plan" FIRST: in a few words per option, name the distinct tactic each one takes (e.g. "1 accept openly, 2 deflect with humor, 3 push back, 4 change the subject") so no two options collapse into the same move. Then write "options" to follow that plan. "plan" is scratch space that is discarded, so keep it to one short line.');
+    } else {
+      head.push('Shape: {"options":[{"tone":"bold","label":"three to five word summary","text":"what ' + player + ' does or says"}]}');
+    }
     head.push(count === 1
       ? "Return exactly 1 option, as a single entry in the options array."
       : "Return exactly " + count + " options, ordered from most direct to most unexpected.");
@@ -692,6 +704,28 @@ export function init() {
     return typeof result === "string" ? result : "";
   }
 
+  // Prose counterpart of the options "plan" field: the expand/enhance paths must return raw
+  // prose (no JSON to hide a field in), so a fast / non-thinking model is instead invited to
+  // think inside a leading <plan>...</plan> block that stripLeadingPlan() removes before the
+  // text is shown. Empty when the Planning step is off, so those prompts stay untouched.
+  function planLine() {
+    if (!cfg("planningStep", true)) return "";
+    return "If it helps, you MAY think first inside a single leading <plan>...</plan> block and write nothing else before it; put the finished roleplay prose after </plan>. The plan is discarded.";
+  }
+
+  // Removes one leading <plan>...</plan> block if the model used the optional planning
+  // scaffold above. Never returns empty: if stripping would leave nothing (model put the
+  // whole answer inside the tag), the original text is kept so a real reply is never lost.
+  // A no-op when no such block is present, so it's safe to run unconditionally.
+  function stripLeadingPlan(text) {
+    var m = text.match(/^\s*<plan>[\s\S]*?<\/plan>\s*/i);
+    if (m) {
+      var rest = text.slice(m[0].length).trim();
+      if (rest) return rest;
+    }
+    return text;
+  }
+
   function buildExpandPrompt(option, ids) {
     var player = ids.persona;
     var originalWords = Math.max(1, wordCount(option.text));
@@ -708,6 +742,8 @@ export function init() {
       "Make the result clearly longer than the source. Aim for " + minimum + " to " + maximum + " words.",
       "Return only the final expanded roleplay prose. No analysis, labels, OOC wrapper, quotation marks around the whole response, or markdown fence."
     ];
+    var plan = planLine();
+    if (plan) rules.push(plan);
     rules.push("]");
 
     return rules.join("\n") + "\n\nCANDIDATE TURN TO EXPAND — written only for " +
@@ -730,6 +766,8 @@ export function init() {
       "Use the live chat only for continuity. Never let " + player + " act on private narration, thoughts, secrets, or other information they have not actually learned.",
       "Return only the revised roleplay prose. No analysis, labels, OOC wrapper, quotation marks around the whole response, or markdown fence."
     ];
+    var plan = planLine();
+    if (plan) rules.push(plan);
     rules.push("]");
 
     return [
@@ -743,6 +781,7 @@ export function init() {
     var text = generationText(result).trim();
     if (!text) throw new Error("The model returned an empty response.");
     text = text.replace(/^```(?:\w+)?\s*/i, "").replace(/\s*```$/i, "").trim();
+    text = stripLeadingPlan(text);
     if (!text) throw new Error("The model returned no usable prose.");
     return cap(text, MAX_OPTION_CHARS);
   }

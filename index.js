@@ -33,6 +33,11 @@ var SETTINGS_HTML = `
       <p class="cr-settings-hint">Rewrite this to change what kind of options you get — darker, funnier, always dialogue, always physical action, more cautious, whatever suits the story. Leave blank to use the built-in default. Crossroads always adds its own rules on top, so options stay in the player's voice and never speak for anyone else.</p>
     </div>
 
+    <div class="cr-settings-row">
+      <label class="checkbox_label"><input type="checkbox" id="cr-s-planning"><span>Planning step (helps fast / non-thinking models)</span></label>
+      <p class="cr-settings-hint">Gives the model a short scratch space to plan before it answers, which is discarded before anything is shown. Recommended when Crossroads points at a fast or non-thinking model (e.g. a Flash variant), where it keeps the four options genuinely distinct instead of near-duplicates. Thinking models already reason on their own, so their output is unchanged either way; turn this off if you want Crossroads to send the leanest possible prompt.</p>
+    </div>
+
     <hr>
     <div class="cr-settings-row">
       <label for="cr-s-source">Generation source</label>
@@ -102,6 +107,7 @@ function buildSettingsPanel() {
 
     var s = Store.settings;
     $("#cr-s-show").prop("checked", s.showBar !== false);
+    $("#cr-s-planning").prop("checked", s.planningStep !== false);
     $("#cr-s-prompt").val(s.systemPrompt || "");
     $("#cr-s-source").val(s.connectionSource || "profile");
     $("#cr-s-openai-url").val(s.openaiUrl || "");
@@ -122,6 +128,10 @@ function buildSettingsPanel() {
         Store.settings.showBar = $(this).prop("checked");
         Store.save();
         Panel.setBarVisible(Store.settings.showBar);
+    });
+    $("#cr-s-planning").on("change", function () {
+        Store.settings.planningStep = $(this).prop("checked");
+        Store.save();
     });
     $("#cr-s-prompt").on("input", function () {
         Store.settings.systemPrompt = $(this).val();

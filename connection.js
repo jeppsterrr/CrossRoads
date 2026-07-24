@@ -24,7 +24,23 @@
 
 import * as Store from "./store.js";
 
-const LOCAL_HOST_RE = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?/i;
+const LOCAL_HOST_RE = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|host\.docker\.internal|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?/i;
+
+// Nothing else aborts these requests: a backend that accepts the connection and then never
+// answers would otherwise leave the bar's busy lock set forever, disabling every button
+// until the page is reloaded. fetch() has no default timeout, and ST's own request path
+// doesn't impose one either, so Crossroads supplies the deadline for both backends.
+const REQUEST_TIMEOUT_MS = 120000;
+
+function withTimeout() {
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS);
+    return {
+        signal: controller.signal,
+        done: function () { clearTimeout(timer); },
+        timedOut: function () { return controller.signal.aborted; }
+    };
+}
 
 export async function generate(prompt) {
     var source = (Store.settings && Store.settings.connectionSource) || "profile";
@@ -42,6 +58,7 @@ async function sendViaProfile(prompt) {
         throw new Error("Connection Manager is unavailable. Install/enable it, or switch Crossroads to the OpenAI-Compatible mode.");
     }
     var raw;
+    var deadline = withTimeout();
     try {
         // sendRequest's real signature is (profileId, messages, maxTokens, custom, overridePayload) -
         // maxTokens is a NUMBER, not an options object. An options object here (an earlier bug)
@@ -54,9 +71,12 @@ async function sendViaProfile(prompt) {
         // Crossroads' already-self-contained prompt from being wrapped in the profile's Instruct
         // Template on text-completion-type profiles (local backends like koboldcpp) - it's a no-op
         // for chat-completion-type profiles, which don't apply an instruct template at all.
-        raw = await service.sendRequest(profileId, [{ role: "user", content: prompt }], undefined, { includeInstruct: false });
+        raw = await service.sendRequest(profileId, [{ role: "user", content: prompt }], undefined, { includeInstruct: false, signal: deadline.signal });
     } catch (error) {
+        if (deadline.timedOut()) throw new Error("The request timed out after " + Math.round(REQUEST_TIMEOUT_MS / 1000) + "s. The backend accepted the connection but never replied.");
         throw new Error("Connection Manager request failed: " + (error && error.message ? error.message : String(error)));
+    } finally {
+        deadline.done();
     }
     var text = extractText(raw);
     if (!text) throw new Error("Connection Manager returned an empty response.");
@@ -105,42 +125,78 @@ async function sendViaOpenAI(prompt) {
     // Crossroads' longest possible reply (a 700-word Expand) is well inside every
     // provider's non-streaming ceiling, so a plain JSON request is enough - no need
     // for the SSE streaming some extensions use to dodge that ceiling on longer jobs.
-    var body = { model: model, messages: [{ role: "user", content: prompt }], temperature: 0.9, stream: false };
+    var temperature = Number(settings.openaiTemperature);
+    if (!Number.isFinite(temperature)) temperature = 0.9;
+    temperature = Math.min(2, Math.max(0, temperature));
+    var body = { model: model, messages: [{ role: "user", content: prompt }], temperature: temperature, stream: false };
     var maxTokens = Number(settings.openaiMaxTokens) || 0;
     if (maxTokens > 0) body.max_tokens = maxTokens;
     var payload = JSON.stringify(body);
 
+    var deadline = withTimeout();
     var response;
-    if (isLocal) {
-        try {
-            response = await fetch(proxiedUrl(endpoint), { method: "POST", headers: Object.assign({}, getProxyHeaders(), headers), body: payload });
-        } catch (proxyError) {
+    try {
+        var init = { method: "POST", body: payload, signal: deadline.signal };
+        if (isLocal) {
+            // Local endpoints rarely send CORS headers, so try ST's proxy first. It is OFF by
+            // default though, and a disabled proxy answers with an HTTP 404 rather than a
+            // network error - so this must fall back on a bad *response* too, not only on a
+            // thrown fetch. Checking only the throw (an earlier bug) made this fallback dead
+            // code in the default configuration: pointing Crossroads at koboldcpp/LM Studio/
+            // Ollama surfaced "CORS proxy is disabled" instead of just trying the direct call,
+            // which frequently works on its own (e.g. Ollama with OLLAMA_ORIGINS=*).
+            var proxyFailed = false;
             try {
-                response = await fetch(endpoint, { method: "POST", headers: headers, body: payload });
-            } catch (directError) {
-                throw new Error("Could not reach " + url + ". Enable the CORS proxy (enableCorsProxy: true in config.yaml) or confirm the endpoint is running. " + directError.message);
+                response = await fetch(proxiedUrl(endpoint), Object.assign({}, init, { headers: Object.assign({}, getProxyHeaders(), headers) }));
+                if (!response.ok && (response.status === 404 || response.status === 502 || response.status === 504)) proxyFailed = true;
+            } catch (proxyError) {
+                if (deadline.timedOut()) throw proxyError;
+                proxyFailed = true;
+            }
+            if (proxyFailed) {
+                try {
+                    response = await fetch(endpoint, Object.assign({}, init, { headers: headers }));
+                } catch (directError) {
+                    if (deadline.timedOut()) throw directError;
+                    throw new Error("Could not reach " + url + ". Enable the CORS proxy (enableCorsProxy: true in config.yaml), or make sure the endpoint is running and allows browser requests. " + directError.message);
+                }
+            }
+        } else {
+            try {
+                response = await fetch(endpoint, Object.assign({}, init, { headers: headers }));
+            } catch (fetchError) {
+                if (deadline.timedOut()) throw fetchError;
+                throw new Error("Could not reach " + url + ": " + fetchError.message);
             }
         }
-    } else {
-        try {
-            response = await fetch(endpoint, { method: "POST", headers: headers, body: payload });
-        } catch (fetchError) {
-            throw new Error("Could not reach " + url + ": " + fetchError.message);
+
+        if (!response.ok) {
+            var errorText = await response.text().catch(function () { return "Unknown error"; });
+            if (response.status === 401) throw new Error("OpenAI-Compatible endpoint returned 401 Unauthorized. Check the API key.");
+            throw new Error("OpenAI-Compatible request failed (" + response.status + "): " + cap(errorText, 300));
         }
-    }
 
-    if (!response.ok) {
-        var errorText = await response.text().catch(function () { return "Unknown error"; });
-        if (response.status === 401) throw new Error("OpenAI-Compatible endpoint returned 401 Unauthorized. Check the API key.");
-        throw new Error("OpenAI-Compatible request failed (" + response.status + "): " + errorText);
+        var data = await response.json();
+        var text = data && data.choices && data.choices[0] && data.choices[0].message
+            ? data.choices[0].message.content
+            : "";
+        if (!text || !String(text).trim()) throw new Error("OpenAI-Compatible endpoint returned an empty response.");
+        return text;
+    } catch (error) {
+        // AbortError surfaces as a DOMException with a generic message; translate it into
+        // something that actually tells the user what happened.
+        if (deadline.timedOut()) {
+            throw new Error("The request timed out after " + Math.round(REQUEST_TIMEOUT_MS / 1000) + "s. The endpoint accepted the connection but never replied.");
+        }
+        throw error;
+    } finally {
+        deadline.done();
     }
+}
 
-    var data = await response.json();
-    var text = data && data.choices && data.choices[0] && data.choices[0].message
-        ? data.choices[0].message.content
-        : "";
-    if (!text || !String(text).trim()) throw new Error("OpenAI-Compatible endpoint returned an empty response.");
-    return text;
+function cap(value, limit) {
+    var text = value == null ? "" : String(value);
+    return text.length > limit ? text.slice(0, limit - 1).trimEnd() + "…" : text;
 }
 
 // --- Settings-panel helper: fills a <select> with the user's saved Connection

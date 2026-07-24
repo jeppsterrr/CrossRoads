@@ -109,9 +109,17 @@ export function init() {
   var MAX_MESSAGE_CHARS = 6000;
   var MAX_CARD_CHARS = 1500;
   var MAX_PROMPT_CHARS = 20000;
-  // Two responses keeps the live situation intact at a fraction of the tokens; the card
-  // carries the longer-term continuity that a wider transcript window used to supply.
+  // Default scene depth. Two responses keeps the live situation intact at a fraction of the
+  // tokens; the card carries the longer-term continuity that a wider transcript window used
+  // to supply. User-adjustable up to MAX_RESPONSE_WINDOW via the Scene context setting.
   var AI_RESPONSE_WINDOW = 2;
+  var MAX_RESPONSE_WINDOW = 10;
+
+  function responseWindow() {
+    var n = Math.round(Number(cfg("contextResponses", AI_RESPONSE_WINDOW)));
+    if (!Number.isFinite(n)) return AI_RESPONSE_WINDOW;
+    return Math.min(MAX_RESPONSE_WINDOW, Math.max(1, n));
+  }
 
   // Each tone the model may pick, with the icon shown on its slot. Keeping this list
   // closed means a hallucinated tone falls back cleanly instead of rendering nothing.
@@ -510,8 +518,9 @@ export function init() {
     for (var i = 0; i < all.length; i += 1) {
       if (!isUserMessage(all[i])) characterPositions.push(i);
     }
-    if (characterPositions.length <= AI_RESPONSE_WINDOW) return all;
-    return all.slice(characterPositions[characterPositions.length - AI_RESPONSE_WINDOW]);
+    var window = responseWindow();
+    if (characterPositions.length <= window) return all;
+    return all.slice(characterPositions[characterPositions.length - window]);
   }
 
   // Pulls persona name/description and cast names/descriptions the same way Deep Story
@@ -609,8 +618,15 @@ export function init() {
     var playerHasWritten = messages.some(isUserMessage);
     var planning = !!cfg("planningStep", true);
 
+    // Each line is explicitly tagged as the player's own turn or the model's. Speaker names
+    // alone are ambiguous - the model has to infer which name is the human, and on a scene
+    // with several characters (or a card whose cast is introduced in prose) it guesses wrong
+    // and starts writing in the wrong voice. The tag is two short tokens per line and makes
+    // the player's turns unmistakable, which is what the options have to imitate.
     var transcript = messages.map(function (m) {
-      return speakerName(m, ids) + ": " + trimMessage(cleanForPrompt(messageText(m)), MAX_MESSAGE_CHARS);
+      var mine = isUserMessage(m);
+      return (mine ? "[PLAYER] " : "[CHARACTER] ") + speakerName(m, ids) + ": " +
+        trimMessage(cleanForPrompt(messageText(m)), MAX_MESSAGE_CHARS);
     }).join("\n\n");
 
     var avoidBlock = "";
@@ -679,8 +695,9 @@ export function init() {
     }
 
     var fallbackChat = "No readable messages yet. Offer opening moves that fit a brand new scene.";
-    var chatHeader = "CURRENT SCENE - the last " + AI_RESPONSE_WINDOW + " responses and the live situation. This is what your options must continue. Lines marked " +
-      player + " are the player's own turns; every other line belongs to the model:\n";
+    var chatHeader = "CURRENT SCENE - the last " + responseWindow() + " responses and the live situation. This is what your options must continue. " +
+      "Lines tagged [PLAYER] were written by the human player as " + player + " - study their voice, tense, vocabulary, length and formatting, because your options must read as if that same person wrote them. " +
+      "Lines tagged [CHARACTER] belong to the model; never write those:\n";
     var closer = "Now write " + (count === 1 ? "the option" : "the " + count + " options") + " as " + player +
       "'s very next turn, continuing directly from the final line of the CURRENT SCENE above.";
     var sections = [head.join("\n")];
@@ -713,17 +730,22 @@ export function init() {
     return "If it helps, you MAY think first inside a single leading <plan>...</plan> block and write nothing else before it; put the finished roleplay prose after </plan>. The plan is discarded.";
   }
 
-  // Removes one leading <plan>...</plan> block if the model used the optional planning
-  // scaffold above. Never returns empty: if stripping would leave nothing (model put the
+  // Removes leading scaffold blocks before the real prose: our own optional <plan>, plus the
+  // reasoning tags some models/connections emit inline (<think>, <thinking>, <reasoning>)
+  // instead of keeping them out of band. Loops so a model that emits several in a row is
+  // fully cleaned. Never returns empty: if stripping would leave nothing (the model put the
   // whole answer inside the tag), the original text is kept so a real reply is never lost.
   // A no-op when no such block is present, so it's safe to run unconditionally.
   function stripLeadingPlan(text) {
-    var m = text.match(/^\s*<plan>[\s\S]*?<\/plan>\s*/i);
-    if (m) {
-      var rest = text.slice(m[0].length).trim();
-      if (rest) return rest;
+    var out = text;
+    for (var i = 0; i < 4; i += 1) {
+      var m = out.match(/^\s*<(plan|think|thinking|reasoning)>[\s\S]*?<\/\1>\s*/i);
+      if (!m) break;
+      var rest = out.slice(m[0].length).trim();
+      if (!rest) break;
+      out = rest;
     }
-    return text;
+    return out;
   }
 
   function buildExpandPrompt(option, ids) {
@@ -793,9 +815,19 @@ export function init() {
     var first = text.indexOf("{");
     var last = text.lastIndexOf("}");
     if (first < 0 || last <= first) throw new Error("The model did not return a JSON object.");
+    var slice = text.slice(first, last + 1);
     var data;
-    try { data = JSON.parse(text.slice(first, last + 1)); } catch (_) {
-      throw new Error("The model returned invalid JSON.");
+    try { data = JSON.parse(slice); } catch (_) {
+      // One conservative repair pass before giving up, for the small syntax slips weaker
+      // models make. Deliberately limited to trailing commas, which are illegal anywhere in
+      // JSON, so removing them cannot change the meaning of an already-valid document.
+      // Notably NOT normalizing smart quotes - curly quotes are legal inside a JSON string
+      // and extremely common in roleplay prose, so "fixing" them would corrupt good output.
+      try {
+        data = JSON.parse(slice.replace(/,\s*([}\]])/g, "$1"));
+      } catch (__) {
+        throw new Error("The model returned invalid JSON.");
+      }
     }
     var list = Array.isArray(data && data.options) ? data.options : [];
     var stamp = Date.now();
@@ -861,17 +893,40 @@ export function init() {
     }
   }
 
+  // Runs the generation, and on a PARSE failure only, silently samples once more. Weaker
+  // models intermittently emit not-quite-JSON (an unclosed brace, a stray line of
+  // commentary); a second sample usually lands cleanly, so retrying beats showing an error
+  // for something one retry fixes. Connection/timeout errors are deliberately NOT retried -
+  // those are real and a retry would just double the wait before failing anyway.
+  async function generateOptions(prompt, count) {
+    var raw = await Connection.generate(prompt);
+    try {
+      return parseOptions(raw, count);
+    } catch (parseError) {
+      var retry = await Connection.generate(prompt);
+      return parseOptions(retry, count);
+    }
+  }
+
   async function draw() {
     if (busy) return;
     if (!chatOpen()) { toast("Open a chat before drawing options."); announce("No chat selected."); return; }
     setBusy(true, "draw");
     closeBubble();
     announce("Drawing new options.");
+    var startedInChat = Store.getCurrentChatId();
     try {
       var messages = await recentMessages();
       var ids = await identities(messages);
-      var raw = await Connection.generate(buildPrompt(messages, OPTION_COUNT, null, ids));
-      options = parseOptions(raw, OPTION_COUNT);
+      var drawn = await generateOptions(buildPrompt(messages, OPTION_COUNT, null, ids), OPTION_COUNT);
+      // The user can switch chats while the generation is in flight. Landing these options
+      // now would write a set built from the PREVIOUS chat's transcript, persona and card
+      // into the newly opened chat's metadata.
+      if (Store.getCurrentChatId() !== startedInChat) {
+        announce("Draw discarded because the chat changed.");
+        return;
+      }
+      options = drawn;
       usedIds = Object.create(null);
       await persistDraw();
       // A bubble opened from the previous set while this draw was in flight would now be
@@ -902,15 +957,24 @@ export function init() {
     if (!chatOpen()) { toast("Open a chat before redrawing options."); announce("No chat selected."); return; }
     var target = options[index];
     if (!target) return;
+    var targetId = target.id;
     setBusy(true, "redraw");
     announce("Redrawing this option.");
+    var startedInChat = Store.getCurrentChatId();
     try {
       var messages = await recentMessages();
       var ids = await identities(messages);
       var keeping = options.filter(function (_, i) { return i !== index; });
-      var raw = await Connection.generate(buildPrompt(messages, 1, keeping, ids, wordCount(target.text)));
-      var replacement = parseOptions(raw, 1)[0];
-      delete usedIds[target.id];
+      var replacement = (await generateOptions(buildPrompt(messages, 1, keeping, ids, wordCount(target.text)), 1))[0];
+      // Same chat-switch guard as draw(). Also re-checks the slot still holds the option this
+      // redraw was started for: without it, a chat switch (which empties options) would make
+      // the assignment below graft a lone entry onto an empty array, producing a sparse set
+      // that then gets persisted into the wrong chat.
+      if (Store.getCurrentChatId() !== startedInChat || !options[index] || options[index].id !== targetId) {
+        announce("Redraw discarded because the chat changed.");
+        return;
+      }
+      delete usedIds[targetId];
       options[index] = replacement;
       await persistDraw();
       if (openIndex === index) openBubble(index);
@@ -942,6 +1006,7 @@ export function init() {
     var beforeWords = wordCount(target.text);
     setBusy(true, mode);
     announce(enhancing ? "Enhancing this option with the custom OOC instruction." : "Expanding this option.");
+    var startedInChat = Store.getCurrentChatId();
     try {
       var messages = await recentMessages();
       var ids = await identities(messages);
@@ -953,7 +1018,7 @@ export function init() {
 
       // A chat switch can happen while generation is in flight. Never let the result from
       // the old chat overwrite an option that merely occupies the same slot in the new one.
-      if (!options[index] || options[index].id !== targetId) {
+      if (Store.getCurrentChatId() !== startedInChat || !options[index] || options[index].id !== targetId) {
         announce("Expansion discarded because the chat changed.");
         return;
       }

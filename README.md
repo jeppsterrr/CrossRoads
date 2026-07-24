@@ -56,6 +56,7 @@ Find these under **Extensions → Crossroads** in the SillyTavern settings panel
 |---|---|
 | **Show the Crossroads bar** | Hides the bar entirely without disabling the extension. |
 | **Choice instruction** | The heart of the plugin. Rewrite it to change what kind of options you get — darker, funnier, always dialogue, always physical action, more cautious. Leave blank to use the built-in default. |
+| **Scene context** | How many of the character's most recent replies are read as the live scene (default 2, max 10). Your own turns in between always come along, each tagged so the model can study your voice and write options that sound like you. Higher means deeper context and proportionally more tokens per draw. |
 | **Planning step** | On by default. Gives the model a short scratch space to plan before it answers, which is discarded before anything reaches you. Helps fast / non-thinking models (e.g. a Flash variant) keep the four options genuinely distinct instead of near-duplicates. Thinking models reason on their own, so their output is unchanged either way; turn it off for the leanest possible prompt. |
 | **Generation source** | Where Crossroads sends its (quiet, background-only) generation requests — see below. |
 
@@ -64,7 +65,7 @@ Find these under **Extensions → Crossroads** in the SillyTavern settings panel
 Crossroads never touches your chat's active connection or history — every draw, redraw, and expansion is a standalone request that only ever writes back into your input box. Pick how that request gets sent:
 
 - **Connection Manager profile** — routed through a saved [Connection Profile](https://docs.sillytavern.app/usage/core-concepts/connection-profiles/), so Crossroads can use a completely different backend/model than your main chat without you ever having to switch anything.
-- **OpenAI-compatible endpoint** — point it directly at any OpenAI-compatible API (a local server like koboldcpp/text-generation-webui/LM Studio, or a hosted one) with its own URL, key, and model. Local endpoints are routed through SillyTavern's own CORS proxy automatically.
+- **OpenAI-compatible endpoint** — point it directly at any OpenAI-compatible API (a local server like koboldcpp/text-generation-webui/LM Studio, or a hosted one) with its own URL, key, model, and temperature. Local endpoints are tried through SillyTavern's CORS proxy first and fall back to a direct connection if that proxy is disabled. Note that the API key is stored in SillyTavern's settings file in plain text, the same as other keys kept there.
 
 ## How it thinks
 

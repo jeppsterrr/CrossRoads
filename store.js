@@ -42,6 +42,12 @@ export const DEFAULT_SETTINGS = {
     openaiKey: "",
     openaiModel: "",
     openaiMaxTokens: 0,
+    openaiTemperature: 0.9,
+    // How many of the character's most recent responses to send as scene context. Player
+    // turns that fall between them come along too, so this bounds cost by the expensive
+    // messages rather than by raw count. Deliberately small by default: Crossroads only
+    // needs the live moment, and the character card carries longer-term continuity.
+    contextResponses: 2,
     ui: {
         accent: "#c8a24a",
         backdrop: "#17171a",
@@ -105,6 +111,19 @@ export function isChatOpen() {
         if ((charId === undefined || charId === null) && !groupId) return false;
         return true;
     } catch (e) { return false; }
+}
+
+// Identifies WHICH chat is open right now. Every async path captures this before its
+// generation call and re-checks it afterwards: chat_metadata and the panel's options array
+// are both swapped out by CHAT_CHANGED mid-flight, so a result that resolves after the user
+// switched chats would otherwise be written into the wrong chat's metadata - options built
+// from a different transcript, persona and character. Same guard Deep Story Reforged uses.
+export function getCurrentChatId() {
+    try {
+        var context = getContext();
+        if (context && context.chatId !== undefined && context.chatId !== null) return context.chatId;
+        return scriptModule ? (scriptModule.chatId !== undefined ? scriptModule.chatId : null) : null;
+    } catch (e) { return null; }
 }
 
 // --- Chat-scoped draw persistence (chat_metadata) ---

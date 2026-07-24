@@ -34,6 +34,12 @@ var SETTINGS_HTML = `
     </div>
 
     <div class="cr-settings-row">
+      <label for="cr-s-context">Scene context: recent responses to send</label>
+      <input type="number" id="cr-s-context" class="text_pole" min="1" max="10" step="1">
+      <p class="cr-settings-hint">How many of the character's most recent replies Crossroads reads as the live scene. Your own turns in between are always included, and each one is tagged so the model can study your voice and write options that sound like you. Default 2, max 10 — raising it gives deeper context but costs proportionally more tokens on every draw.</p>
+    </div>
+
+    <div class="cr-settings-row">
       <label class="checkbox_label"><input type="checkbox" id="cr-s-planning"><span>Planning step (helps fast / non-thinking models)</span></label>
       <p class="cr-settings-hint">Gives the model a short scratch space to plan before it answers, which is discarded before anything is shown. Recommended when Crossroads points at a fast or non-thinking model (e.g. a Flash variant), where it keeps the four options genuinely distinct instead of near-duplicates. Thinking models already reason on their own, so their output is unchanged either way; turn this off if you want Crossroads to send the leanest possible prompt.</p>
     </div>
@@ -63,7 +69,10 @@ var SETTINGS_HTML = `
       <input type="text" id="cr-s-openai-model" class="text_pole" placeholder="Model name the endpoint expects">
       <label for="cr-s-openai-maxtokens">Max tokens (optional)</label>
       <input type="number" id="cr-s-openai-maxtokens" class="text_pole" min="0" step="1" placeholder="0 = provider default">
-      <p class="cr-settings-hint">Local endpoints (koboldcpp, text-generation-webui, LM Studio, ...) are routed through ST's CORS proxy automatically.</p>
+      <label for="cr-s-openai-temp">Temperature</label>
+      <input type="number" id="cr-s-openai-temp" class="text_pole" min="0" max="2" step="0.05" placeholder="0.9">
+      <p class="cr-settings-hint">Temperature is the most direct lever on how different the four options are from each other: raise it for wilder variety, lower it for safer, more grounded choices. Default 0.9. (Connection Manager profiles use their own preset's sampler instead.)</p>
+      <p class="cr-settings-hint">Local endpoints (koboldcpp, text-generation-webui, LM Studio, ...) are tried through ST's CORS proxy first, then directly if the proxy is disabled. The API key above is stored in SillyTavern's settings file in plain text, so take the same care with it you would with any other key kept there.</p>
     </div>
   </div>
 </div>
@@ -108,12 +117,14 @@ function buildSettingsPanel() {
     var s = Store.settings;
     $("#cr-s-show").prop("checked", s.showBar !== false);
     $("#cr-s-planning").prop("checked", s.planningStep !== false);
+    $("#cr-s-context").val(s.contextResponses || 2);
     $("#cr-s-prompt").val(s.systemPrompt || "");
     $("#cr-s-source").val(s.connectionSource || "profile");
     $("#cr-s-openai-url").val(s.openaiUrl || "");
     $("#cr-s-openai-key").val(s.openaiKey || "");
     $("#cr-s-openai-model").val(s.openaiModel || "");
     $("#cr-s-openai-maxtokens").val(s.openaiMaxTokens || "");
+    $("#cr-s-openai-temp").val(s.openaiTemperature == null ? 0.9 : s.openaiTemperature);
 
     Connection.populateProfileDropdown(document.getElementById("cr-s-profile"), s.connectionProfileId);
 
@@ -131,6 +142,16 @@ function buildSettingsPanel() {
     });
     $("#cr-s-planning").on("change", function () {
         Store.settings.planningStep = $(this).prop("checked");
+        Store.save();
+    });
+    // Clamped on write as well as on read (panel.js's responseWindow), since a number input
+    // still accepts out-of-range values typed directly rather than via its spinner.
+    $("#cr-s-context").on("change", function () {
+        var n = Math.round(Number($(this).val()));
+        if (!Number.isFinite(n)) n = 2;
+        n = Math.min(10, Math.max(1, n));
+        Store.settings.contextResponses = n;
+        $(this).val(n);
         Store.save();
     });
     $("#cr-s-prompt").on("input", function () {
@@ -160,6 +181,14 @@ function buildSettingsPanel() {
     });
     $("#cr-s-openai-maxtokens").on("input", function () {
         Store.settings.openaiMaxTokens = Number($(this).val()) || 0;
+        Store.save();
+    });
+    $("#cr-s-openai-temp").on("change", function () {
+        var t = Number($(this).val());
+        if (!Number.isFinite(t)) t = 0.9;
+        t = Math.min(2, Math.max(0, t));
+        Store.settings.openaiTemperature = t;
+        $(this).val(t);
         Store.save();
     });
 }
